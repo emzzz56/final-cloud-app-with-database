@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.http import HttpResponseRedirect
 # <HINT> Import any new Models here
+from django.db.models import Sum
 from .models import Course, Enrollment, Question, Choice, Lesson, Learner, Instructor, Submission
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, render, redirect
@@ -138,19 +139,28 @@ def extract_answers(request):
         # For each selected choice, check if it is a correct answer or not
         # Calculate the total score
 def show_exam_result(request, course_id, submission_id):
+    context = {}
     course = get_object_or_404(Course, pk=course_id)
     submission = get_object_or_404(Submission, pk=submission_id)
     selectedChoices = submission.chocies.all()
-    questions = Question.objects.get(course=course_id)
+    questions = Question.objects.filter(course=course_id)
     totalScore = 0
-    for question in questions:
+    gradeTotal = questions.aggregate(Sum('grade'))['grade__sum']
+    for choice in selectedChoices:
+        question = Question.objects.get(pk=choice.question_id.id)
+        correctChoiceCount = Choice.objects.filter(question_id=question,is_correct=True).count()
         grade = question.grade
-        correctAnswers = question.choice.is_correct
-        if correctAnswers == selectedChoices:
-            totalScore =  totalScore + question.grade
+        if correctChoiceCount > 1:
+            grade = grade/correctChoiceCount
+        if choice.is_correct:
+            totalScore =  totalScore + grade
             
-    totalScore = totalScore/Question.count() * 100
-    return totalScore
+    totalScore = (totalScore/gradeTotal) * 100
+    totalScore = float("{0:.2f}".format(totalScore))
+    context['grade'] = totalScore
+    context['course'] = course
+    context['selected_choices'] = selectedChoices
+    return render(request, 'onlinecourse/exam_result_bootstrap.html', context)
 
 
 
